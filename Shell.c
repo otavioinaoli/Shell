@@ -1,1 +1,67 @@
-#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nvoid execute_command(const char *command) {\n    FILE *fp;\n    char path[1035];\n\n    // Open the command for reading.\n    fp = popen(command, "r");\n    if (fp == NULL) {\n        perror("Failed to run command");\n        return;\n    }\n\n    // Read the output a line at a time - output it.\n    while (fgets(path, sizeof(path)-1, fp) != NULL) {\n        printf("%s", path);\n    }\n\n    // Close the command stream.\n    if (pclose(fp) == -1) {\n        perror("Failed to close command stream");\n    }\n}  \n\nint main(int argc, char *argv[]) {\n    if (argc < 2) {\n        fprintf(stderr, "Usage: %s <command>\n", argv[0]);\n        return EXIT_FAILURE;\n    }\n\n    execute_command(argv[1]);\n\n    return EXIT_SUCCESS;\n}
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+
+#define MAX 256
+
+int main() {
+  char comando[MAX], *token;
+  int pid, i;
+
+  while (1) {
+    printf("> ");
+    fgets(comando, MAX, stdin);
+
+    comando[strlen(comando) - 1] = '\0';
+
+    char** argumentos = calloc(MAX + 1, sizeof(char *));
+    
+    token = strtok(comando, " ");
+    for(i = 0; token != NULL; i++){
+        argumentos[i] = token;
+        token = strtok(NULL, " ");
+    }
+    argumentos[i] = NULL;
+    
+    if (!strcmp(comando, "exit")) {
+      exit(EXIT_SUCCESS);
+    }
+
+    if(i <= 0) continue;
+
+    int ampersand = !strcmp(argumentos[i - 1], "&");
+
+    if(ampersand) 
+      argumentos[--i] = NULL;
+
+    int changeOut = 0;
+    if(i >= 2)
+      changeOut = !strcmp(argumentos[i - 2], ">");
+
+    int changeIn = 0;
+    if(i >= 2)
+      changeIn = !strcmp(argumentos[i - 2], "<");
+
+    pid = fork();
+    if(pid && ampersand) continue;
+
+    if (pid) {
+      waitpid(pid, NULL, 0);
+    } else {
+      if(changeOut){
+        freopen(argumentos[i - 1], "w", stdout);
+        argumentos[i - 2] = NULL;
+      }
+      else if(changeIn){
+        freopen(argumentos[i - 1], "r", stdin);
+        argumentos[i - 2] = NULL;
+      }
+
+      execvp(argumentos[0], argumentos);
+      printf("Erro ao executar comando!\n");
+      exit(EXIT_FAILURE);
+    }
+  }
+}
